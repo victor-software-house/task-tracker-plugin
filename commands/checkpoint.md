@@ -6,13 +6,23 @@ allowed-tools: Read, Write, Bash(bash:*, cat:*, date:*, echo:*)
 
 Create a checkpoint entry for the active task. This preserves context that would be lost during compaction.
 
+**IMPORTANT**: A task must be explicitly set via `/set-task` before creating checkpoints. Tasks are NEVER auto-detected.
+
 ## Steps
 
-1. **Identify active task**:
-   Check session database: !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/context-db.sh get-active-task "$(cat /tmp/claude-session-id 2>/dev/null || echo "")" 2>/dev/null || echo ""`
+1. **Verify active task is set**:
+   The session must have an active task set. If no task is set, instruct user:
 
-   If no active task found, check for task directories:
-   !`ls -1 local-docs/todo/ 2>/dev/null | grep -E '^[0-9]{2}-' | grep -v '^previous-' | head -5`
+   ```
+   ⚠️ No active task set for this session.
+
+   Please run `/set-task <task-name>` first to specify which task
+   you're working on. Tasks are never auto-detected because multiple
+   agents may work on different tasks simultaneously.
+
+   Available tasks:
+   ```
+   Then list: !`ls -1 local-docs/todo/ 2>/dev/null | grep -E '^[0-9]{2}-' | grep -v '^previous-' | head -10`
 
 2. **If active task exists**, create checkpoint with:
    - **Timestamp**: Current date/time
@@ -53,7 +63,10 @@ Create a checkpoint entry for the active task. This preserves context that would
 
 5. **After saving**, report:
    - Checkpoint file location
-   - Current context window usage (if available)
+   - Task name and session info
    - Recommendation for next checkpoint timing
 
-If no active task is set, guide user to use `/set-task` first.
+6. **Remind about /rename** if session name doesn't match task:
+   ```
+   💡 Consider running `/rename [task-name]` to match your session name to your task.
+   ```

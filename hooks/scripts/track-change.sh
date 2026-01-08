@@ -1,6 +1,6 @@
 #!/bin/bash
 # PostToolUse Hook - Track file changes for progress monitoring
-# Lightweight tracking of Edit/Write operations
+# Uses session_id from hook input (always provided by Claude Code)
 
 set -euo pipefail
 
@@ -11,18 +11,19 @@ DB_SCRIPT="${PLUGIN_ROOT}/scripts/context-db.sh"
 # Read input from stdin
 input=$(cat)
 
+# session_id is ALWAYS provided by Claude Code in hook input
 session_id=$(echo "$input" | jq -r '.session_id // ""')
 tool_name=$(echo "$input" | jq -r '.tool_name // ""')
 tool_input=$(echo "$input" | jq -c '.tool_input // {}')
 cwd=$(echo "$input" | jq -r '.cwd // ""')
 
-# Get active task
+# Get active task for this session (explicitly set, never auto-detected)
 active_task=$("$DB_SCRIPT" get-active-task "$session_id" 2>/dev/null || echo "")
 
 # Extract file path
 file_path=$(echo "$tool_input" | jq -r '.file_path // .path // ""')
 
-# Skip if no active task
+# Skip if no active task set for this session
 [ -z "$active_task" ] && exit 0
 
 # Get todo directory
@@ -43,7 +44,7 @@ fi
 timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 changes_file="${task_dir}/.changes.log"
 
-echo "[${timestamp}] ${tool_name}: ${rel_path}" >> "$changes_file"
+echo "[${timestamp}] ${tool_name}: ${rel_path} (session: ${session_id:0:8})" >> "$changes_file"
 
 # Update session stats in database
 current_data=$("$DB_SCRIPT" get "$session_id")
@@ -54,7 +55,7 @@ edits_count=$((edits_count + 1))
 {
   "edits_count": $edits_count,
   "last_edit": "$rel_path",
-  "last_edit_time": $timestamp
+  "last_edit_time": "$timestamp"
 }
 EOF
 
