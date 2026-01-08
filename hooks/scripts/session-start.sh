@@ -1,17 +1,17 @@
 #!/bin/bash
-# SessionStart Hook - Initialize session tracking and remind about task setup
-# IMPORTANT: Never auto-detect tasks - multiple agents may work on different tasks simultaneously
+# SessionStart Hook - Initialize session and inject task context
+# Reads active task and provides context to Claude
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(dirname "$(dirname "$SCRIPT_DIR")")"
 DB_SCRIPT="${PLUGIN_ROOT}/scripts/context-db.sh"
+CHECKPOINT_SCRIPT="${PLUGIN_ROOT}/scripts/checkpoint-helper.sh"
 
 # Read input from stdin
 input=$(cat)
 
-# session_id is ALWAYS provided by Claude Code in hook input
 session_id=$(echo "$input" | jq -r '.session_id // ""')
 cwd=$(echo "$input" | jq -r '.cwd // ""')
 project_dir=$(echo "$input" | jq -r '.workspace.project_dir // ""')
@@ -25,29 +25,60 @@ timestamp=$(date +%s)
 {
   "started_at": $timestamp,
   "cwd": "$cwd",
-  "project_dir": "$project_dir",
-  "session_id": "$session_id"
+  "project_dir": "$project_dir"
 }
 EOF
 
-# Check if this session already has an active task set
-active_task=$("$DB_SCRIPT" get-active-task "$session_id" 2>/dev/null || echo "")
+# Try to find active task
+todo_dir="${base_dir}/local-docs/todo"
+active_task=""
+task_context=""
+
+if [ -d "$todo_dir" ]; then
+  # Check if there's a saved active task for this session
+  saved_task=$("$DB_SCRIPT" get-active-task "$session_id" 2>/dev/null || echo "")
+
+  if [ -n "$saved_task" ] && [ -d "${todo_dir}/${saved_task}" ]; then
+    active_task="$saved_task"
+  else
+    # Find most recently modified task directory
+    task_path=$("$CHECKPOINT_SCRIPT" find-task "$todo_dir" 2>/dev/null || echo "")
+    if [ -n "$task_path" ] && [ -d "$task_path" ]; then
+      active_task=$(basename "$task_path")
+      "$DB_SCRIPT" set-active-task "$session_id" "$active_task"
+    fi
+  fi
+
+  # Load task context if found
+  if [ -n "$active_task" ]; then
+    index_file="${todo_dir}/${active_task}/00-index.md"
+    checkpoint_file="${todo_dir}/${active_task}/CHECKPOINT-LOG.md"
+
+    if [ -f "$index_file" ]; then
+      # Read first 100 lines of index for context (avoid huge files)
+      task_overview=$(head -100 "$index_file")
+    fi
+
+    if [ -f "$checkpoint_file" ]; then
+      # Get last checkpoint entry
+      last_checkpoint=$("$CHECKPOINT_SCRIPT" last "${todo_dir}/${active_task}" 2>/dev/null || echo "")
+    fi
+  fi
+fi
 
 # Build system message
 if [ -n "$active_task" ]; then
-  # Task already set for this session
   cat << EOF
 {
   "continue": true,
-  "systemMessage": "📋 **Task Tracker Active**\\n\\n**Session**: \`${session_id:0:12}...\`\\n**Active Task**: \`${active_task}\`\\n\\nCommands: \`/checkpoint\`, \`/task-status\`, \`/resume-task\`\\n\\n💡 Use \`/rename <task-name>\` to give this session a meaningful name."
+  "systemMessage": "📋 **Active Task Detected**: \`${active_task}\`\n\nTask tracking is enabled. Use \`/checkpoint\` to save progress, \`/task-status\` to view current state.\n\nTo switch tasks: \`/set-task <task-name>\`"
 }
 EOF
 else
-  # No task set - remind user to set one explicitly
   cat << EOF
 {
   "continue": true,
-  "systemMessage": "📋 **Task Tracker Ready**\\n\\n**Session**: \`${session_id:0:12}...\`\\n\\nNo active task set. To start tracking:\\n1. \`/set-task <task-name>\` - Set the task you're working on\\n2. \`/rename <task-name>\` - Give this session a meaningful name\\n\\n⚠️ Tasks are NOT auto-detected. Each session must explicitly set its task."
+  "systemMessage": "📋 **Task Tracker**: No active task detected in \`local-docs/todo/\`.\n\nTo start tracking a task, use \`/set-task <task-name>\` or create a task directory following the TODO-WORKFLOW.md convention."
 }
 EOF
 fi
