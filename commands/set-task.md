@@ -1,10 +1,12 @@
 ---
-description: Set the active task for tracking and checkpoints
+description: Set the active task for this session's tracking and checkpoints
 argument-hint: [task-name or task-number]
 allowed-tools: Read, Bash(bash:*, ls:*, mkdir:*, cat:*, echo:*)
 ---
 
 Set the active task for this session. All checkpoints and tracking will be associated with this task.
+
+**IMPORTANT**: Tasks are NEVER auto-detected. Each session must explicitly set its task because multiple agents may work on different tasks simultaneously.
 
 ## Steps
 
@@ -37,28 +39,29 @@ Set the active task for this session. All checkpoints and tracking will be assoc
    Prompt: "Enter task number or name to activate:"
 
 4. **Set active task in database**:
-   !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/context-db.sh set-active-task "$(cat /tmp/claude-session-id 2>/dev/null || echo "default")" "[TASK-NAME]"`
+   Use the session_id (available in context) to associate this task with this session.
+
+   !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/context-db.sh set-active-task "[SESSION_ID]" "[TASK-NAME]"`
 
 5. **Initialize tracking files** (if not exist):
-
-   Create CHECKPOINT-LOG.md if missing:
    !`bash ${CLAUDE_PLUGIN_ROOT}/scripts/checkpoint-helper.sh init "local-docs/todo/[TASK]" 2>/dev/null`
 
-6. **Confirm activation**:
+6. **Confirm activation and remind about /rename**:
 
 ```
-✅ ACTIVE TASK SET: [task-name]
+✅ TASK SET: [task-name]
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Task directory: local-docs/todo/[task-name]/
-Checkpoint log: CHECKPOINT-LOG.md
+Session ID: [session_id truncated]
 
 📋 Commands available:
 • /checkpoint    - Save progress checkpoint
 • /task-status   - View current status
 • /resume-task   - Reload task context
 
-💡 Use /checkpoint regularly to preserve context.
+💡 **RECOMMENDED**: Run `/rename [task-name]` to give this session
+   a meaningful name that matches your task.
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
