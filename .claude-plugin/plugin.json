@@ -1,0 +1,9 @@
+{
+  "name": "task-tracker",
+  "version": "1.0.0",
+  "description": "Track task progress and preserve context between session compactions. Monitors context window usage and prompts for checkpoints at key thresholds.",
+  "author": {
+    "name": "Victor Araújo"
+  },
+  "keywords": ["task-tracking", "context-preservation", "compaction", "workflow"]
+}

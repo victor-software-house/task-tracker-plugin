@@ -1,0 +1,65 @@
+{
+  "description": "Task tracker hooks for context preservation and progress tracking",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session-start.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "mcp__firecrawl__firecrawl_scrape|mcp__firecrawl__firecrawl_crawl|mcp__firecrawl__firecrawl_search|mcp__firecrawl__firecrawl_agent|mcp__firecrawl__firecrawl_extract",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/pre-firecrawl.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/scripts/track-change.sh",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "CRITICAL: Context compaction is about to occur. Before proceeding, you MUST create a checkpoint to preserve current context.\n\n1. Summarize what has been accomplished so far\n2. Document any insights, decisions, or context that would be lost\n3. Note the current state and next steps\n4. Write this to the active task's CHECKPOINT-LOG.md using the checkpoint-helper.sh script\n\nAfter creating the checkpoint, respond with 'Checkpoint saved' to proceed with compaction.",
+            "timeout": 120
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "Before ending this session, consider if there's important context to preserve:\n\n- Any unfinished work or pending decisions?\n- Insights or discoveries that should be documented?\n- Next steps that should be recorded?\n\nIf yes, create a checkpoint using /checkpoint. If context is already well-documented, proceed to stop.",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}
